@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de QR Code Dinâmico com Download</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        /* Estilo para centralizar o contêiner do QR code e garantir que ele não cause overflow */
+        #qrcodeCanvasContainer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 300px; /* Largura máxima para o QR code */
+            margin: 20px auto;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            min-height: 276px; /* Altura mínima para acomodar o QR code 256x256 + padding */
+        }
+        /* Garante que a imagem/canvas dentro do qrcodeCanvasContainer seja responsiva */
+        #qrcodeCanvasContainer img,
+        #qrcodeCanvasContainer canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 4px; /* Pequeno arredondamento para a imagem do QR Code */
+        }
+        /* Estilo para a mensagem de erro/aviso */
+        #messageBox {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #f8d7da; /* Vermelho para erro */
+            color: #721c24;
+            padding: 10px 20px;
+            border: 1px solid #f5c6cb;
+            border-radius: 0.25rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+            display: none; /* Escondido por padrão */
+            font-family: 'Inter', sans-serif;
+            text-align: center;
+        }
+        /* Estilo para botão desabilitado */
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4 font-['Inter']">
+
+    <div id="messageBox"></div>
+
+    <div class="bg-white p-6 sm:p-8 rounded-lg shadow-xl w-full max-w-md">
+        <h1 class="text-2xl sm:text-3xl font-bold text-center text-gray-800 mb-6">Gerador de QR Code</h1>
+
+        <div class="mb-6">
+            <label for="text-input" class="block text-sm font-medium text-gray-700 mb-1">Texto ou URL:</label>
+            <textarea id="text-input" rows="4" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm" placeholder="Digite aqui o que você quer transformar em QR Code..."></textarea>
+        </div>
+
+        <button id="generate-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-md shadow-md transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Gerar QR Code
+        </button>
+
+        <button id="download-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-md shadow-md transition duration-150 ease-in-out mt-4 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 btn-disabled" disabled>
+            Baixar QR Code (PNG)
+        </button>
+
+        <div id="qrcodeCanvasContainer" class="mt-6">
+             <span id="qrcode-placeholder" class="text-gray-500 text-sm">O QR Code aparecerá aqui</span>
+        </div>
+    </div>
+
+    <footer class="text-center text-gray-600 mt-8 text-sm">
+        <p>&copy; <span id="currentYear"></span> Gerador de QR Code. Todos os direitos reservados.</p>
+    </footer>
+
+    <script>
+        const textInputElement = document.getElementById("text-input");
+        const qrcodeContainer = document.getElementById("qrcodeCanvasContainer");
+        const generateButton = document.getElementById("generate-button");
+        const downloadButton = document.getElementById("download-button");
+        const messageBox = document.getElementById('messageBox');
+        const qrcodePlaceholder = document.getElementById('qrcode-placeholder');
+
+        function showMessage(message, type = 'error') {
+            messageBox.textContent = message;
+            if (type === 'error') {
+                messageBox.style.backgroundColor = '#f8d7da';
+                messageBox.style.color = '#721c24';
+                messageBox.style.borderColor = '#f5c6cb';
+            } else { // success or info
+                messageBox.style.backgroundColor = '#d4edda';
+                messageBox.style.color = '#155724';
+                messageBox.style.borderColor = '#c3e6cb';
+            }
+            messageBox.style.display = 'block';
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, 3000);
+        }
+
+        function sanitizeFilename(text) {
+            if (!text) return "qrcode";
+            // Remove caracteres inválidos para nomes de arquivo e substitui por _
+            let sanitized = text.replace(/[\\/:*?"<>|#%&{}]/g, '_');
+            // Remove múltiplos underscores seguidos
+            sanitized = sanitized.replace(/__+/g, '_');
+            // Remove underscores no início ou fim
+            sanitized = sanitized.replace(/^_+|_+$/g, '');
+            // Limita o comprimento do nome do arquivo (ex: 100 caracteres)
+            sanitized = sanitized.substring(0, 100);
+            return sanitized || "qrcode"; // Retorna "qrcode" se o resultado for vazio
+        }
+
+        function generateQRCode() {
+            const textToEncode = textInputElement.value;
+            qrcodeContainer.innerHTML = "";
+            qrcodeContainer.appendChild(qrcodePlaceholder);
+
+            if (textToEncode.trim() === "") {
+                showMessage("Por favor, insira um texto ou URL para gerar o QR Code.");
+                qrcodePlaceholder.style.display = 'block';
+                downloadButton.classList.add('btn-disabled');
+                downloadButton.disabled = true;
+                return;
+            }
+
+            qrcodePlaceholder.style.display = 'none';
+
+            try {
+                new QRCode(qrcodeContainer, {
+                    text: textToEncode,
+                    width: 256,
+                    height: 256,
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+
+                if (qrcodeContainer.querySelector('canvas') || qrcodeContainer.querySelector('img')) {
+                    const placeholderInContainer = qrcodeContainer.querySelector('#qrcode-placeholder');
+                    if (placeholderInContainer) placeholderInContainer.style.display = 'none';
+                }
+
+                downloadButton.classList.remove('btn-disabled');
+                downloadButton.disabled = false;
+                showMessage("QR Code gerado com sucesso!", "success");
+
+            } catch (error) {
+                console.error("Erro ao gerar QR Code:", error);
+                showMessage("Ocorreu um erro ao gerar o QR Code. Tente novamente.");
+                qrcodePlaceholder.style.display = 'block';
+                downloadButton.classList.add('btn-disabled');
+                downloadButton.disabled = true;
+            }
+        }
+
+        function downloadQRCode() {
+            const canvas = qrcodeContainer.querySelector("canvas");
+            const img = qrcodeContainer.querySelector("img");
+            const originalText = textInputElement.value;
+            const filename = sanitizeFilename(originalText) + ".png";
+
+            let dataUrl = null;
+
+            if (canvas) {
+                dataUrl = canvas.toDataURL("image/png");
+            } else if (img) {
+                // Se for uma imagem e já for uma data URL PNG, podemos usá-la.
+                // Caso contrário, precisaríamos desenhar a imagem em um canvas para garantir o formato PNG.
+                // Para simplificar e como qrcode.js frequentemente usa canvas ou data URLs para img:
+                if (img.src.startsWith('data:image/')) { // Verifica se já é uma data URL
+                     // Se for uma data URL, mas não PNG, idealmente converteria para PNG.
+                     // Por agora, vamos assumir que se for data URL, é utilizável ou que o canvas é a preferência.
+                     // Se for um canvas, ele já será pego primeiro.
+                     // Se for uma imagem de URL externa, o download direto pode não funcionar devido a CORS.
+                     // A biblioteca qrcode.js geralmente cria um canvas ou uma <img> com data URL.
+                    dataUrl = img.src;
+                     // Para forçar o download como PNG mesmo que a data URL seja de outro tipo (ex: gif, jpeg)
+                     // seria necessário desenhar em um canvas e exportar.
+                     // No entanto, o método mais confiável é usar o canvas gerado pela biblioteca.
+                     // Se apenas <img> estiver disponível e for uma data URL, o navegador tentará baixá-la como está.
+                     // Para garantir PNG, o ideal é que o qrcode.js tenha gerado um canvas.
+                } else {
+                     // Se img.src não for uma data URL (improvável com qrcode.js para o QR em si)
+                     // e não houver canvas, o download pode falhar ou não ser no formato desejado.
+                     // Vamos priorizar o canvas. Se só houver img e for URL externa, o download é problemático.
+                     // Por segurança, se não for data URL, avisamos.
+                    showMessage("Não foi possível obter os dados da imagem para download no formato PNG. Tente gerar novamente.");
+                    return;
+                }
+            }
+
+            if (dataUrl) {
+                const link = document.createElement('a');
+                link.download = filename;
+                // Para o download funcionar corretamente, o tipo MIME na data URL deve ser image/octet-stream
+                // ou o navegador pode tentar exibir a imagem.
+                link.href = dataUrl.replace(/^data:image\/[^;]+/, 'data:application/octet-stream');
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showMessage(`Download de "${filename}" iniciado.`, "success");
+            } else {
+                showMessage("Nenhum QR Code para baixar. Gere um primeiro ou verifique o console para erros.");
+            }
+        }
+
+        generateButton.addEventListener("click", generateQRCode);
+        downloadButton.addEventListener("click", downloadQRCode);
+
+        document.getElementById("currentYear").textContent = new Date().getFullYear();
+
+        textInputElement.addEventListener("keypress", function(event) {
+            if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                generateQRCode();
+            }
+        });
+
+        downloadButton.classList.add('btn-disabled');
+        downloadButton.disabled = true;
+    </script>
+
+</body>
+</html>
