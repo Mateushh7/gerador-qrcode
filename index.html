@@ -213,7 +213,9 @@
             const textLineHeight = Math.ceil(fontSize * 1.2); 
             const horizontalPaddingForTextOnImage = 20; 
 
+            // --- NOVA CONSTANTE PARA A BORDA BRANCA ---
             const qrBorderWidth = 10; // Espessura da borda branca ao redor do QR code
+            // --- FIM DA NOVA CONSTANTE ---
 
             const additionalHeightForText = paddingTopForText + textLineHeight + paddingBottomForText;
 
@@ -221,26 +223,34 @@
             const qrWidth = dataSourceElement.width || (dataSourceElement.naturalWidth || 256);
             const qrHeight = dataSourceElement.height || (dataSourceElement.naturalHeight || 256);
             
+            // Ajustar dimensões do novo canvas para incluir a borda
             newCanvas.width = qrWidth + (2 * qrBorderWidth); 
             newCanvas.height = qrHeight + (2 * qrBorderWidth) + additionalHeightForText;
             
             const ctx = newCanvas.getContext('2d');
 
+            // 1. Preencher o fundo total do novo canvas (branco)
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, newCanvas.width, newCanvas.height);
             
+            // 2. Desenhar o QR Code original no novo canvas, com deslocamento para a borda
+            // A biblioteca qrcode.js já desenha o QR com fundo branco (colorLight),
+            // então não precisamos desenhar um retângulo branco específico para a borda
+            // se o QR code em si já tiver o fundo desejado.
+            // Apenas desenhamos o QR code na posição correta.
             ctx.drawImage(dataSourceElement, qrBorderWidth, qrBorderWidth, qrWidth, qrHeight); 
 
+            // 3. Configurar e desenhar o texto
             ctx.fillStyle = textColor;
-            // --- LINHA MODIFICADA ---
-            ctx.font = `bold ${fontSize}px ${fontFamily}`; // Adicionado "bold" para negrito
-            // --- FIM DA LINHA MODIFICADA ---
+            ctx.font = `${fontSize}px ${fontFamily}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top'; 
 
+            // Ajustar a posição Y do texto para considerar a borda
             const textYPosition = qrBorderWidth + qrHeight + qrBorderWidth + paddingTopForText; 
             
             let textToDisplayOnImage = textToDraw;
+            // A largura máxima para o texto deve considerar a largura total do canvas menos o padding lateral
             const maxWidthForTextOnImage = newCanvas.width - (2 * horizontalPaddingForTextOnImage);
 
             let metrics = ctx.measureText(textToDisplayOnImage);
@@ -253,6 +263,7 @@
                  if (truncated.length === 0 && textToDraw.length > 0) textToDisplayOnImage = '...';
             }
             
+            // Centralizar o texto na largura do novo canvas
             ctx.fillText(textToDisplayOnImage, newCanvas.width / 2, textYPosition);
 
             const dataUrl = newCanvas.toDataURL("image/png");
